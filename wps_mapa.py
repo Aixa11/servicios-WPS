@@ -9,9 +9,9 @@ def get_conn():
     return psycopg2.connect(
         host="localhost",
         port="5433",
-        user="administrator", # cambiar a tu user
+        user="usuario", # cambiar a tu user
         password="xxxxx",
-        database="girsar" # cambiar a tu BD
+        database="nombre_bd" # cambiar a tu BD
     )
 
 def convertir_temperatura(fp_value):
