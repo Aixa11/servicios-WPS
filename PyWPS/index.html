@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mapa WPS Temperatura MODIS</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map { height: 100%; margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const wpsUrl = 'http://localhost:5000/wps';
+
+    // Crear el mapa centrado en Argentina
+    const map = L.map('map').setView([-29.5, -62.1], 6);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker;
+
+    function construirPeticionWPS(lat, lon, radio=50000) {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<wps:Execute version="1.0.0" service="WPS"
+  xmlns:wps="http://www.opengis.net/wps/1.0.0"
+  xmlns:ows="http://www.opengis.net/ows/1.1"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.opengis.net/wps/1.0.0
+  http://schemas.opengis.net/wps/1.0.0/wpsExecute_request.xsd">
+  <ows:Identifier>temperatura_modis</ows:Identifier>
+  <wps:DataInputs>
+    <wps:Input>
+      <ows:Identifier>lat</ows:Identifier>
+      <wps:Data><wps:LiteralData>${lat}</wps:LiteralData></wps:Data>
+    </wps:Input>
+    <wps:Input>
+      <ows:Identifier>lon</ows:Identifier>
+      <wps:Data><wps:LiteralData>${lon}</wps:LiteralData></wps:Data>
+    </wps:Input>
+    <wps:Input>
+      <ows:Identifier>radio</ows:Identifier>
+      <wps:Data><wps:LiteralData>${radio}</wps:LiteralData></wps:Data>
+    </wps:Input>
+  </wps:DataInputs>
+  <wps:ResponseForm>
+    <wps:ResponseDocument storeExecuteResponse="false" status="false">
+      <wps:Output asReference="false"><ows:Identifier>temperatura_minima</ows:Identifier></wps:Output>
+      <wps:Output asReference="false"><ows:Identifier>temperatura_maxima</ows:Identifier></wps:Output>
+      <wps:Output asReference="false"><ows:Identifier>temperatura_promedio</ows:Identifier></wps:Output>
+      <wps:Output asReference="false"><ows:Identifier>confianza</ows:Identifier></wps:Output>
+      <wps:Output asReference="false"><ows:Identifier>num_puntos_usados</ows:Identifier></wps:Output>
+      <wps:Output asReference="false"><ows:Identifier>mensaje</ows:Identifier></wps:Output>
+    </wps:ResponseDocument>
+  </wps:ResponseForm>
+</wps:Execute>`;
+    }
+
+    map.on('click', function(e) {
+      const lat = e.latlng.lat.toFixed(5);
+      const lon = e.latlng.lng.toFixed(5);
+      const xml = construirPeticionWPS(lat, lon);
+
+      if (marker) map.removeLayer(marker);
+      marker = L.marker([lat, lon]).addTo(map);
+
+      fetch(wpsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/xml' },
+        body: xml
+      })
+      .then(response => response.text())
+      .then(str => (new window.DOMParser()).parseFromString(str, "text/xml"))
+      .then(data => {
+        // Extraer outputs de la respuesta XML
+        const outputs = data.getElementsByTagNameNS("http://www.opengis.net/wps/1.0.0", "Output");
+        let result = {};
+        for (let i = 0; i < outputs.length; i++) {
+          const id = outputs[i].getElementsByTagNameNS("http://www.opengis.net/ows/1.1", "Identifier")[0].textContent;
+          const val = outputs[i].getElementsByTagNameNS("http://www.opengis.net/wps/1.0.0", "LiteralData")[0].textContent;
+          result[id] = val;
+        }
+
+        let popupContent = "";
+        if (result.mensaje && result.mensaje.trim() !== "") {
+          popupContent = `<b>Mensaje:</b> ${result.mensaje}`;
+        } else {
+          popupContent = `
+            <b>Temperatura mínima:</b> ${result.temperatura_minima} °C<br>
+            <b>Temperatura máxima:</b> ${result.temperatura_maxima} °C<br>
+            <b>Temperatura promedio:</b> ${result.temperatura_promedio} °C<br>
+            <b>Confianza:</b> ${result.confianza}<br>
+            <b>Puntos usados:</b> ${result.num_puntos_usados}`;
+        }
+
+        marker.bindPopup(popupContent).openPopup();
+      })
+      .catch(err => {
+        marker.bindPopup("Error: No se pudo obtener datos del WPS").openPopup();
+        console.error(err);
+      });
+    });
+  </script>
+</body>
+</html>
