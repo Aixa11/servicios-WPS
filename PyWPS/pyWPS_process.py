@@ -36,9 +36,9 @@ class TemperaturaMODISProcess(Process):
         return psycopg2.connect(
             host="localhost",
             port="5433",
-            user="administrator",
-            password="Sa0.C0n43",
-            database="girsar"
+            user="usuario",
+            password="xxxx",
+            database="nombre_bd"
         )
 
     def convertir_temperatura(self, fp_value):
